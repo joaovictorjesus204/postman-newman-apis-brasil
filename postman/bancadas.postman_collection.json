@@ -1,0 +1,55 @@
+{
+  "info": {
+    "_postman_id": "02be4964-e925-5c08-bc12-98c834471bb6",
+    "name": "Bancadas por estado (orientado a dados)",
+    "description": "Confere o tamanho da bancada de cada estado na Câmara dos Deputados. Rodar com o arquivo data/bancadas.csv.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "BAN-01 Bancada de {{uf}} tem o número de cadeiras da Constituição",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Orientado a dados: cada linha de data/bancadas.csv vira uma iteração (uf, cadeiras).",
+              "const uf = pm.iterationData.get(\"uf\");",
+              "const cadeiras = Number(pm.iterationData.get(\"cadeiras\"));",
+              "const deputados = pm.response.json().dados;",
+              "",
+              "pm.test(`${uf}: status 200`, () => pm.response.to.have.status(200));",
+              "",
+              "pm.test(`${uf}: todos os deputados são do estado`, () => {",
+              "    deputados.forEach(d => pm.expect(d.siglaUf).to.eql(uf));",
+              "});",
+              "",
+              "// A Constituição fixa as cadeiras de cada estado (mínimo 8, máximo 70).",
+              "// A lista traz quem está em exercício: um suplente substitui o titular licenciado,",
+              "// então o total fica igual. A tolerância de 1 cobre uma vaga momentânea.",
+              "pm.test(`${uf}: ${cadeiras} cadeiras (tolerância de 1 vaga momentânea)`, () => {",
+              "    pm.expect(deputados.length).to.be.within(cadeiras - 1, cadeiras);",
+              "});",
+              "",
+              "pm.test(`${uf}: nenhum deputado repetido`, () => {",
+              "    const ids = deputados.map(d => d.id);",
+              "    pm.expect(new Set(ids).size).to.eql(ids.length);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{camaraUrl}}/deputados?siglaUf={{uf}}&itens=100"
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "postman-newman-apis-brasil",
+  "version": "1.0.0",
+  "description": "Testes de API com Postman e Newman no ViaCEP, na Câmara dos Deputados e no Banco Central",
+  "author": "João Victor de Jesus",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "run-s --continue-on-error test:apis test:bancadas",
+    "test:apis": "newman run postman/apis-brasil.postman_collection.json -e postman/ambiente.postman_environment.json -r cli,htmlextra,junit --reporter-htmlextra-export reports/report.html --reporter-htmlextra-title \"APIs públicas do Brasil\" --reporter-junit-export reports/junit-apis.xml",
+    "test:bancadas": "newman run postman/bancadas.postman_collection.json -e postman/ambiente.postman_environment.json -d data/bancadas.csv -r cli,htmlextra,junit --reporter-htmlextra-export reports/bancadas.html --reporter-htmlextra-title \"Bancadas por estado\" --reporter-junit-export reports/junit-bancadas.xml",
+    "test:verbose": "newman run postman/apis-brasil.postman_collection.json -e postman/ambiente.postman_environment.json --verbose",
+    "test:viacep": "newman run postman/apis-brasil.postman_collection.json -e postman/ambiente.postman_environment.json --folder ViaCEP",
+    "test:camara": "newman run postman/apis-brasil.postman_collection.json -e postman/ambiente.postman_environment.json --folder \"Câmara dos Deputados\"",
+    "test:bcb": "newman run postman/apis-brasil.postman_collection.json -e postman/ambiente.postman_environment.json --folder \"Banco Central (PTAX)\""
+  },
+  "devDependencies": {
+    "newman": "^6.2.1",
+    "newman-reporter-htmlextra": "^1.23.1",
+    "npm-run-all2": "^6.2.2"
+  }
+}

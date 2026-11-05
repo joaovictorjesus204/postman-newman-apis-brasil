@@ -1,0 +1,45 @@
+# Pipeline do Azure DevOps: o mesmo teste do GitHub Actions, pronto para importar.
+# Azure DevOps > Pipelines > New pipeline > GitHub > este repositório > Existing YAML file.
+
+trigger:
+  branches:
+    include: [main]
+
+schedules:
+  - cron: '0 12 * * 1-5'   # dias úteis, 9h de Brasília
+    displayName: Execução diária
+    branches:
+      include: [main]
+    always: true
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - task: NodeTool@0
+    displayName: Instalar Node.js
+    inputs:
+      versionSpec: '22.x'
+
+  - script: npm install
+    displayName: Instalar dependências
+
+  - script: npm test
+    displayName: Rodar as coleções (APIs e bancadas)
+
+  # Os resultados JUnit aparecem na aba "Tests" da execução, com histórico por teste.
+  - task: PublishTestResults@2
+    displayName: Publicar resultados na aba Tests
+    condition: always()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: 'reports/junit-*.xml'
+      testRunTitle: APIs públicas do Brasil
+      failTaskOnFailedTests: true
+
+  - task: PublishPipelineArtifact@1
+    displayName: Guardar relatórios HTML
+    condition: always()
+    inputs:
+      targetPath: reports
+      artifact: relatorios-newman

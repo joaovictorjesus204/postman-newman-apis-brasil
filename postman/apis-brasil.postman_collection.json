@@ -1,0 +1,760 @@
+{
+  "info": {
+    "_postman_id": "8cd65353-73db-5f50-a3fa-1354a28754d2",
+    "name": "APIs públicas do Brasil",
+    "description": "Testes de API com Postman e Newman em três APIs públicas brasileiras: ViaCEP, Câmara dos Deputados e Banco Central (PTAX). Autor: João Victor de Jesus.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "ViaCEP",
+      "description": "Consulta de CEP e busca de endereço na API pública do ViaCEP.",
+      "item": [
+        {
+          "name": "CEP-01 CEP válido retorna o endereço completo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const corpo = pm.response.json();",
+                  "",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Resposta em JSON\", () => {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+                  "});",
+                  "",
+                  "pm.test(\"Contrato: campos obrigatórios com o tipo certo\", () => {",
+                  "    pm.response.to.have.jsonSchema({",
+                  "        type: \"object\",",
+                  "        required: [\"cep\", \"logradouro\", \"bairro\", \"localidade\", \"uf\", \"ibge\", \"ddd\"],",
+                  "        properties: {",
+                  "            cep: { type: \"string\", pattern: \"^\\\\d{5}-\\\\d{3}$\" },",
+                  "            logradouro: { type: \"string\", minLength: 1 },",
+                  "            bairro: { type: \"string\" },",
+                  "            localidade: { type: \"string\" },",
+                  "            uf: { type: \"string\", pattern: \"^[A-Z]{2}$\" },",
+                  "            ibge: { type: \"string\", pattern: \"^\\\\d{7}$\" },",
+                  "            ddd: { type: \"string\", pattern: \"^\\\\d{2}$\" }",
+                  "        }",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test(\"Endereço da Praça da Sé, em São Paulo\", () => {",
+                  "    pm.expect(corpo.cep).to.eql(\"01001-000\");",
+                  "    pm.expect(corpo.logradouro).to.eql(\"Praça da Sé\");",
+                  "    pm.expect(corpo.localidade).to.eql(\"São Paulo\");",
+                  "    pm.expect(corpo.uf).to.eql(\"SP\");",
+                  "    pm.expect(corpo.ddd).to.eql(\"11\");",
+                  "});",
+                  "",
+                  "pm.test(\"Código IBGE de São Paulo (3550308)\", () => pm.expect(corpo.ibge).to.eql(\"3550308\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{viacepUrl}}/ws/01001000/json/",
+            "description": ""
+          }
+        },
+        {
+          "name": "CEP-02 CEP com formato inválido é recusado com 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "pm.test(\"CEP com 7 dígitos: status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{viacepUrl}}/ws/0100100/json/",
+            "description": ""
+          }
+        },
+        {
+          "name": "CEP-03 CEP inexistente informa erro no corpo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "// O ViaCEP responde 200 para CEP inexistente e sinaliza o erro no corpo.",
+                  "// O comportamento está documentado no README como desvio do padrão REST (o esperado seria 404).",
+                  "pm.test(\"Status 200 com o campo erro\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const erro = pm.response.json().erro;",
+                  "    pm.expect([true, \"true\"]).to.include(erro);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{viacepUrl}}/ws/99999999/json/",
+            "description": ""
+          }
+        },
+        {
+          "name": "CEP-04 Busca por endereço retorna só ruas da cidade pedida",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const lista = pm.response.json();",
+                  "",
+                  "pm.test(\"Status 200 e lista com resultados\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(lista).to.be.an(\"array\").that.is.not.empty;",
+                  "});",
+                  "",
+                  "pm.test(\"Todos os resultados são de São Paulo - SP\", () => {",
+                  "    lista.forEach(item => {",
+                  "        pm.expect(item.uf).to.eql(\"SP\");",
+                  "        pm.expect(item.localidade).to.eql(\"São Paulo\");",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test(\"O CEP 01001-000 está entre os resultados\", () => {",
+                  "    pm.expect(lista.map(item => item.cep)).to.include(\"01001-000\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{viacepUrl}}/ws/SP/Sao Paulo/Praca da Se/json/",
+            "description": ""
+          }
+        },
+        {
+          "name": "CEP-05 Mesmo CEP em XML",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const tipo = pm.response.headers.get(\"Content-Type\");",
+                  "",
+                  "pm.test(\"Status 200 e resposta em XML\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(tipo).to.include(\"xml\");",
+                  "});",
+                  "",
+                  "// Achado (ver README): o ViaCEP devolve o XML como application/xhtml+xml,",
+                  "// tipo de página web, e não application/xml, tipo de dado.",
+                  "if (!tipo.includes(\"application/xml\") && !tipo.includes(\"text/xml\")) {",
+                  "    console.warn(`Achado: Content-Type do XML é \"${tipo}\"`);",
+                  "}",
+                  "",
+                  "const xml2js = require(\"xml2js\");",
+                  "xml2js.parseString(pm.response.text(), { explicitArray: false }, (erro, xml) => {",
+                  "    pm.test(\"XML traz o mesmo CEP e a mesma cidade do JSON\", () => {",
+                  "        pm.expect(erro).to.be.null;",
+                  "        pm.expect(xml.xmlcep.cep).to.eql(\"01001-000\");",
+                  "        pm.expect(xml.xmlcep.localidade).to.eql(\"São Paulo\");",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{viacepUrl}}/ws/01001000/xml/",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Câmara dos Deputados",
+      "description": "API de Dados Abertos da Câmara dos Deputados (v2): listagem com paginação, detalhe e partidos.",
+      "item": [
+        {
+          "name": "CAM-01 Lista deputados de SP em ordem alfabética",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const corpo = pm.response.json();",
+                  "const deputados = corpo.dados;",
+                  "",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test(\"Contrato de cada deputado\", () => {",
+                  "    pm.response.to.have.jsonSchema({",
+                  "        type: \"object\",",
+                  "        required: [\"dados\", \"links\"],",
+                  "        properties: {",
+                  "            dados: {",
+                  "                type: \"array\",",
+                  "                items: {",
+                  "                    type: \"object\",",
+                  "                    required: [\"id\", \"nome\", \"siglaPartido\", \"siglaUf\", \"urlFoto\"],",
+                  "                    properties: {",
+                  "                        id: { type: \"integer\" },",
+                  "                        nome: { type: \"string\", minLength: 1 },",
+                  "                        siglaPartido: { type: \"string\" },",
+                  "                        siglaUf: { type: \"string\" },",
+                  "                        urlFoto: { type: \"string\" }",
+                  "                    }",
+                  "                }",
+                  "            },",
+                  "            links: { type: \"array\" }",
+                  "        }",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test(\"Respeita o limite de 10 itens por página\", () => {",
+                  "    pm.expect(deputados.length).to.be.within(1, 10);",
+                  "});",
+                  "",
+                  "pm.test(\"Filtro por UF: todos são de SP\", () => {",
+                  "    deputados.forEach(d => pm.expect(d.siglaUf).to.eql(\"SP\"));",
+                  "});",
+                  "",
+                  "pm.test(\"Ordenação: nomes em ordem alfabética\", () => {",
+                  "    const nomes = deputados.map(d => d.nome);",
+                  "    const ordenados = [...nomes].sort((a, b) => a.localeCompare(b, \"pt-BR\", { sensitivity: \"base\" }));",
+                  "    pm.expect(nomes).to.eql(ordenados);",
+                  "});",
+                  "",
+                  "pm.test(\"Paginação: tem link para a próxima página\", () => {",
+                  "    const proxima = corpo.links.find(l => l.rel === \"next\");",
+                  "    pm.expect(proxima, \"link next\").to.exist;",
+                  "    pm.collectionVariables.set(\"proximaPagina\", proxima.href);",
+                  "});",
+                  "",
+                  "// Encadeamento: o primeiro deputado da lista é detalhado na próxima requisição.",
+                  "pm.collectionVariables.set(\"deputadoId\", deputados[0].id);",
+                  "pm.collectionVariables.set(\"deputadoNome\", deputados[0].nome);",
+                  "pm.collectionVariables.set(\"idsPrimeiraPagina\", JSON.stringify(deputados.map(d => d.id)));",
+                  "pm.collectionVariables.set(\"ultimoNomePrimeiraPagina\", deputados[deputados.length - 1].nome);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{camaraUrl}}/deputados?siglaUf=SP&ordem=ASC&ordenarPor=nome&itens=10",
+            "description": ""
+          }
+        },
+        {
+          "name": "CAM-02 Detalhe do deputado escolhido na lista",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const dados = pm.response.json().dados;",
+                  "",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test(\"É o mesmo deputado da lista\", () => {",
+                  "    pm.expect(dados.id).to.eql(Number(pm.collectionVariables.get(\"deputadoId\")));",
+                  "    pm.expect(dados.ultimoStatus.nome).to.eql(pm.collectionVariables.get(\"deputadoNome\"));",
+                  "});",
+                  "",
+                  "pm.test(\"Último status é por São Paulo\", () => pm.expect(dados.ultimoStatus.siglaUf).to.eql(\"SP\"));",
+                  "",
+                  "pm.test(\"Dados pessoais preenchidos\", () => {",
+                  "    pm.expect(dados.nomeCivil).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(dados.dataNascimento).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{camaraUrl}}/deputados/{{deputadoId}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "CAM-03 Próxima página traz outros deputados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const deputados = pm.response.json().dados;",
+                  "const idsPrimeira = JSON.parse(pm.collectionVariables.get(\"idsPrimeiraPagina\"));",
+                  "",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test(\"Nenhum deputado se repete entre as páginas 1 e 2\", () => {",
+                  "    deputados.forEach(d => pm.expect(idsPrimeira).to.not.include(d.id));",
+                  "});",
+                  "",
+                  "pm.test(\"Primeiro nome da página 2 vem depois do último da página 1\", () => {",
+                  "    pm.expect(deputados[0].nome.localeCompare(pm.collectionVariables.get(\"ultimoNomePrimeiraPagina\"), \"pt-BR\")).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{proximaPagina}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "CAM-04 Partidos com sigla e nome",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const partidos = pm.response.json().dados;",
+                  "",
+                  "pm.test(\"Status 200 e lista não vazia\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(partidos).to.be.an(\"array\").that.is.not.empty;",
+                  "});",
+                  "",
+                  "pm.test(\"Cada partido tem id, sigla e nome\", () => {",
+                  "    partidos.forEach(p => {",
+                  "        pm.expect(p.id).to.be.a(\"number\");",
+                  "        pm.expect(p.sigla).to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(p.nome).to.be.a(\"string\").and.not.empty;",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test(\"Siglas não se repetem\", () => {",
+                  "    const siglas = partidos.map(p => p.sigla);",
+                  "    pm.expect(new Set(siglas).size).to.eql(siglas.length);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{camaraUrl}}/partidos?itens=100&ordem=ASC&ordenarPor=sigla",
+            "description": ""
+          }
+        },
+        {
+          "name": "CAM-05 Deputado inexistente não retorna dados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "pm.test(\"Status de erro do cliente (4xx)\", () => {",
+                  "    pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{camaraUrl}}/deputados/1",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Banco Central (PTAX)",
+      "description": "Cotações oficiais de câmbio (PTAX) do Banco Central, pela API OData Olinda.",
+      "item": [
+        {
+          "name": "BCB-01 Moedas disponíveis incluem dólar e euro",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const moedas = pm.response.json().value;",
+                  "",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test(\"Lista inclui USD e EUR\", () => {",
+                  "    const simbolos = moedas.map(m => m.simbolo);",
+                  "    pm.expect(simbolos).to.include.members([\"USD\", \"EUR\"]);",
+                  "});",
+                  "",
+                  "pm.test(\"Cada moeda tem símbolo de 3 letras e nome\", () => {",
+                  "    moedas.forEach(m => {",
+                  "        pm.expect(m.simbolo).to.match(/^[A-Z]{3}$/);",
+                  "        pm.expect(m.nomeFormatado).to.be.a(\"string\").and.not.empty;",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{bcbUrl}}/Moedas?$format=json",
+            "description": ""
+          }
+        },
+        {
+          "name": "BCB-02 Dólar nos últimos 30 dias",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Período dos últimos 30 dias, no formato que a API do Banco Central pede (MM-DD-AAAA).",
+                  "const formatar = d => [String(d.getMonth() + 1).padStart(2, \"0\"), String(d.getDate()).padStart(2, \"0\"), d.getFullYear()].join(\"-\");",
+                  "const hoje = new Date();",
+                  "const inicio = new Date(hoje);",
+                  "inicio.setDate(hoje.getDate() - 30);",
+                  "pm.collectionVariables.set(\"dataInicial\", formatar(inicio));",
+                  "pm.collectionVariables.set(\"dataFinal\", formatar(hoje));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const cotacoes = pm.response.json().value;",
+                  "",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test(\"Contrato de cada cotação\", () => {",
+                  "    pm.response.to.have.jsonSchema({",
+                  "        type: \"object\",",
+                  "        required: [\"value\"],",
+                  "        properties: {",
+                  "            value: {",
+                  "                type: \"array\",",
+                  "                items: {",
+                  "                    type: \"object\",",
+                  "                    required: [\"cotacaoCompra\", \"cotacaoVenda\", \"dataHoraCotacao\"],",
+                  "                    properties: {",
+                  "                        cotacaoCompra: { type: \"number\" },",
+                  "                        cotacaoVenda: { type: \"number\" },",
+                  "                        dataHoraCotacao: { type: \"string\" }",
+                  "                    }",
+                  "                }",
+                  "            }",
+                  "        }",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test(\"Pelo menos 15 dias úteis com cotação em 30 dias\", () => {",
+                  "    pm.expect(cotacoes.length).to.be.at.least(15);",
+                  "});",
+                  "",
+                  "pm.test(\"Regra: venda nunca menor que compra\", () => {",
+                  "    cotacoes.forEach(c => pm.expect(c.cotacaoVenda).to.be.at.least(c.cotacaoCompra));",
+                  "});",
+                  "",
+                  "pm.test(\"Valores plausíveis (entre R$ 1 e R$ 20)\", () => {",
+                  "    cotacoes.forEach(c => pm.expect(c.cotacaoVenda).to.be.within(1, 20));",
+                  "});",
+                  "",
+                  "// Encadeamento: a última cotação do período é conferida na consulta por dia.",
+                  "const ultima = cotacoes[cotacoes.length - 1];",
+                  "const [ano, mes, dia] = ultima.dataHoraCotacao.slice(0, 10).split(\"-\");",
+                  "pm.collectionVariables.set(\"ultimoDiaUtil\", `${mes}-${dia}-${ano}`);",
+                  "pm.collectionVariables.set(\"ultimaVendaDolar\", ultima.cotacaoVenda);",
+                  "pm.collectionVariables.set(\"ultimaCompraDolar\", ultima.cotacaoCompra);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{bcbUrl}}/CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@dataInicial='{{dataInicial}}'&@dataFinalCotacao='{{dataFinal}}'&$format=json",
+            "description": ""
+          }
+        },
+        {
+          "name": "BCB-03 Consulta por dia confere com a consulta por período",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const cotacoes = pm.response.json().value;",
+                  "",
+                  "pm.test(\"Status 200 com uma cotação\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(cotacoes).to.have.lengthOf(1);",
+                  "});",
+                  "",
+                  "pm.test(\"Mesmos valores de compra e venda nos dois endpoints\", () => {",
+                  "    pm.expect(cotacoes[0].cotacaoVenda).to.eql(Number(pm.collectionVariables.get(\"ultimaVendaDolar\")));",
+                  "    pm.expect(cotacoes[0].cotacaoCompra).to.eql(Number(pm.collectionVariables.get(\"ultimaCompraDolar\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{bcbUrl}}/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='{{ultimoDiaUtil}}'&$format=json",
+            "description": ""
+          }
+        },
+        {
+          "name": "BCB-04 Domingo não tem cotação",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Domingo mais recente antes de hoje.",
+                  "const d = new Date();",
+                  "d.setDate(d.getDate() - (d.getDay() === 0 ? 7 : d.getDay()));",
+                  "const mmddaaaa = [String(d.getMonth() + 1).padStart(2, \"0\"), String(d.getDate()).padStart(2, \"0\"), d.getFullYear()].join(\"-\");",
+                  "pm.collectionVariables.set(\"domingo\", mmddaaaa);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "pm.test(\"Status 200 com lista vazia\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().value).to.be.an(\"array\").that.is.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{bcbUrl}}/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='{{domingo}}'&$format=json",
+            "description": ""
+          }
+        },
+        {
+          "name": "BCB-05 Euro de fechamento acima do dólar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+                  "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+                  "",
+                  "const cotacoes = pm.response.json().value;",
+                  "",
+                  "pm.test(\"Status 200 e boletins de fechamento\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(cotacoes).to.be.an(\"array\").that.is.not.empty;",
+                  "    cotacoes.forEach(c => pm.expect(c.tipoBoletim).to.eql(\"Fechamento\"));",
+                  "});",
+                  "",
+                  "pm.test(\"Último euro de fechamento é maior que o último dólar\", () => {",
+                  "    const ultimoEuro = cotacoes[cotacoes.length - 1].cotacaoVenda;",
+                  "    pm.expect(ultimoEuro).to.be.above(Number(pm.collectionVariables.get(\"ultimaVendaDolar\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{bcbUrl}}/CotacaoMoedaPeriodo(moeda=@moeda,dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@moeda='EUR'&@dataInicial='{{dataInicial}}'&@dataFinalCotacao='{{dataFinal}}'&$filter=tipoBoletim eq 'Fechamento'&$format=json",
+            "description": ""
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Nova tentativa automática: se a API responder erro de servidor (5xx), a mesma",
+          "// requisição roda de novo, até 2 vezes, com 3 segundos de pausa. A tentativa com",
+          "// erro não conta como falha; se o erro continuar na terceira, o teste reprova.",
+          "const tentativa = Number(pm.collectionVariables.get(\"tentativa\") || 0);",
+          "if (pm.response.code >= 500 && tentativa < 2) {",
+          "    console.warn(`${pm.info.requestName}: ${pm.response.code} ${pm.response.status}. Nova tentativa (${tentativa + 1} de 2).`);",
+          "    pm.collectionVariables.set(\"tentativa\", tentativa + 1);",
+          "    pm.collectionVariables.set(\"repetindo\", \"sim\");",
+          "    pm.execution.setNextRequest(pm.info.requestName);",
+          "    setTimeout(() => {}, 3000);",
+          "    return;",
+          "}",
+          "pm.collectionVariables.set(\"tentativa\", 0);",
+          "pm.collectionVariables.set(\"repetindo\", \"nao\");",
+          "",
+          "// Critério de desempenho comum a todas as requisições da coleção.",
+          "pm.test(\"Responde em até 5 segundos\", () => {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "deputadoId",
+      "value": ""
+    },
+    {
+      "key": "deputadoNome",
+      "value": ""
+    },
+    {
+      "key": "idsPrimeiraPagina",
+      "value": ""
+    },
+    {
+      "key": "proximaPagina",
+      "value": ""
+    },
+    {
+      "key": "dataInicial",
+      "value": ""
+    },
+    {
+      "key": "dataFinal",
+      "value": ""
+    },
+    {
+      "key": "ultimoDiaUtil",
+      "value": ""
+    },
+    {
+      "key": "ultimaVendaDolar",
+      "value": ""
+    },
+    {
+      "key": "ultimaCompraDolar",
+      "value": ""
+    },
+    {
+      "key": "domingo",
+      "value": ""
+    },
+    {
+      "key": "ultimoNomePrimeiraPagina",
+      "value": ""
+    },
+    {
+      "key": "tentativa",
+      "value": "0"
+    },
+    {
+      "key": "repetindo",
+      "value": "nao"
+    }
+  ]
+}
