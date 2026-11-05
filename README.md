@@ -23,7 +23,7 @@ Autor: João Victor de Jesus
 | | |
 |---|---|
 | Requisições | 15 na coleção principal + 27 iterações orientadas a dados (uma por estado) |
-| Verificações | 165 (57 na coleção principal e 108 nas bancadas) |
+| Verificações | 192 (57 na coleção principal e 135 nas bancadas) |
 | Contrato | JSON Schema no ViaCEP, na Câmara e no Banco Central |
 | Encadeamento | Lista de deputados → detalhe → próxima página; dólar no período → mesmo dia na consulta diária |
 | Execução automática | A cada push e diariamente, nos dias úteis, pelo GitHub Actions |
@@ -47,6 +47,7 @@ Relatórios: `reports\report.html` (coleção principal) e `reports\bancadas.htm
 | Comando | O que faz |
 |---|---|
 | `npm test` | Roda as duas coleções e gera os relatórios HTML e JUnit |
+| `npm run test:ci` | O mesmo, pulando a Câmara (usado no CI, fora do Brasil) |
 | `npm run test:apis` | Só a coleção principal |
 | `npm run test:bancadas` | Só as bancadas, com `data/bancadas.csv` |
 | `npm run test:viacep` / `test:camara` / `test:bcb` | Só uma API |
@@ -81,7 +82,7 @@ Relatórios: `reports\report.html` (coleção principal) e `reports\bancadas.htm
 | BCB-03 | Consulta por dia confere com a consulta por período | Encadeamento, consistência |
 | BCB-04 | Domingo não tem cotação | Negativo |
 | BCB-05 | Euro de fechamento acima do dólar | Regra de negócio |
-| Todas | Resposta em até 5 segundos | Desempenho |
+| Todas | Resposta em até 5 segundos (15 s na Câmara, ver Achados) | Desempenho |
 
 ---
 
@@ -111,6 +112,7 @@ azure-pipelines.yml                             o mesmo pipeline no Azure DevOps
 | **Bancadas orientadas a dados** (`-d data/bancadas.csv`) | Um teste, 27 estados. A regra vem da Constituição (mínimo 8, máximo 70 cadeiras), e não do que a API devolve |
 | **Validação de regra, não de valor do dia** | A cotação muda todo dia. Os testes conferem que a venda é maior ou igual à compra, que o euro vale mais que o dólar e que os dois endpoints dão o mesmo valor |
 | **Nova tentativa em erro 5xx** (`pm.execution.setNextRequest`) | Na segunda execução local, a API do Banco Central respondeu `502 Bad Gateway` uma vez, e na execução anterior tinha funcionado. Agora a coleção repete a requisição até 2 vezes, com 3 s de pausa, e registra o aviso no log. Erro que persiste continua reprovando |
+| **Câmara pulada no CI** (`pm.execution.skipRequest`) | No GitHub Actions, a API da Câmara respondeu `504 upstream request timeout` em quase todas as requisições, enquanto ViaCEP e Banco Central responderam normalmente. No computador local ela também teve períodos de lentidão e 504, mas em menor proporção (ver Achados). Para o CI não ficar vermelho por instabilidade de um serviço de terceiro, no `npm run test:ci` as requisições da Câmara aparecem como puladas, com o motivo no log. No computador local, `npm test` roda tudo, com nova tentativa em 5xx |
 | **Teste de tempo de resposta na coleção** | Escrito uma vez, vale para todas as requisições |
 | **Relatórios htmlextra e JUnit** | O HTML é legível por quem não é desenvolvedor. O JUnit alimenta a aba Tests do Azure DevOps |
 | **`run-s --continue-on-error`** | Se a coleção principal falhar, as bancadas rodam mesmo assim e o resultado mostra tudo |
@@ -123,11 +125,13 @@ azure-pipelines.yml                             o mesmo pipeline no Azure DevOps
 | Achado | Detalhe |
 |---|---|
 | **ViaCEP devolve o XML como `application/xhtml+xml`** | Esse tipo indica página web (XHTML). Para dado em XML, o esperado é `application/xml` ou `text/xml`. Um cliente que decide como ler a resposta pelo Content-Type pode tratar o retorno como página. O CEP-05 aceita o tipo atual e registra o aviso no log |
+| **API da Câmara lenta e com 504 intermitente** | No mesmo dia, do mesmo computador, a listagem de deputados respondeu em 50 ms numa execução e entre 8 e 15 s em outra, com `504 upstream request timeout` em 8 de 27 estados. O 504 chega sempre em 15 s, o que indica o tempo limite do gateway da Câmara esperando o servidor interno. A coleção repete a requisição em 5xx e usa 15 s como limite de tempo para a Câmara; para as outras APIs o limite continua 5 s |
 | **ViaCEP responde 200 para CEP inexistente** | O erro vem no corpo (`"erro": "true"`). O esperado no padrão REST seria 404. O teste CEP-03 valida o comportamento atual e aceita o campo como texto ou booleano, porque a API já mudou esse tipo antes |
 
 ## Limitações
 
 - APIs públicas de terceiros: instabilidade ou mudança de contrato podem quebrar a execução. A execução diária detecta isso rápido.
+- A API da Câmara fica instável com frequência, e no GitHub Actions e no Azure DevOps (servidores no exterior) responde 504 em quase todas as requisições. Nesses ambientes, os testes da Câmara e das bancadas ficam como pulados; eles rodam completos no computador local.
 - O número de deputados em exercício pode variar por uma vaga momentânea, por isso BAN-01 aceita uma cadeira a menos.
 
 ## Próximos passos

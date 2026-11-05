@@ -442,6 +442,28 @@
             "description": ""
           }
         }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// A API da Câmara responde \"504 upstream request timeout\" para a maior parte das",
+              "// requisições vindas do servidor do GitHub Actions, que fica fora do Brasil (ver README).",
+              "// Na execução de CI (execucao=ci), estas requisições são puladas e aparecem como \"skipped\".",
+              "// No computador local, rodam normalmente.",
+              "if (pm.environment.get(\"execucao\") === \"ci\") {",
+              "    console.log(`${pm.info.requestName}: pulada no CI (Câmara não responde a acessos de fora do Brasil).`);",
+              "    pm.execution.skipRequest();",
+              "}",
+              "",
+              "// A Câmara tem lentidão recorrente (10 a 15 s, ver Achados no README).",
+              "// O limite de tempo das requisições dela é de 15 s; o das outras APIs continua 5 s.",
+              "pm.variables.set(\"limiteTempoMs\", 15000);"
+            ]
+          }
+        }
       ]
     },
     {
@@ -695,9 +717,10 @@
           "pm.collectionVariables.set(\"tentativa\", 0);",
           "pm.collectionVariables.set(\"repetindo\", \"nao\");",
           "",
-          "// Critério de desempenho comum a todas as requisições da coleção.",
-          "pm.test(\"Responde em até 5 segundos\", () => {",
-          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "// Critério de desempenho comum a todas as requisições da coleção (5 s, ou 15 s na Câmara).",
+          "const limite = Number(pm.variables.get(\"limiteTempoMs\") || 5000);",
+          "pm.test(`Responde em até ${limite / 1000} segundos`, () => {",
+          "    pm.expect(pm.response.responseTime).to.be.below(limite);",
           "});"
         ]
       }

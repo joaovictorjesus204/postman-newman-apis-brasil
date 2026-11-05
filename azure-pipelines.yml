@@ -24,7 +24,8 @@ steps:
   - script: npm install
     displayName: Instalar dependências
 
-  - script: npm test
+  # Os agentes hospedados do Azure ficam fora do Brasil: a Câmara é pulada como no GitHub Actions.
+  - script: npm run test:ci
     displayName: Rodar as coleções (APIs e bancadas)
 
   # Os resultados JUnit aparecem na aba "Tests" da execução, com histórico por teste.

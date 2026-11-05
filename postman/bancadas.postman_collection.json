@@ -14,6 +14,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
+              "// Se a coleção vai repetir a requisição por erro 5xx, os testes ficam para a nova tentativa.",
+              "if (pm.collectionVariables.get(\"repetindo\") === \"sim\") return;",
+              "",
               "// Orientado a dados: cada linha de data/bancadas.csv vira uma iteração (uf, cadeiras).",
               "const uf = pm.iterationData.get(\"uf\");",
               "const cadeiras = Number(pm.iterationData.get(\"cadeiras\"));",
@@ -50,6 +53,62 @@
         ],
         "url": "{{camaraUrl}}/deputados?siglaUf={{uf}}&itens=100"
       }
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// A API da Câmara responde \"504 upstream request timeout\" para a maior parte das",
+          "// requisições vindas do servidor do GitHub Actions, que fica fora do Brasil (ver README).",
+          "// Na execução de CI (execucao=ci), estas requisições são puladas e aparecem como \"skipped\".",
+          "// No computador local, rodam normalmente.",
+          "if (pm.environment.get(\"execucao\") === \"ci\") {",
+          "    console.log(`${pm.info.requestName}: pulada no CI (Câmara não responde a acessos de fora do Brasil).`);",
+          "    pm.execution.skipRequest();",
+          "}",
+          "",
+          "// A Câmara tem lentidão recorrente (10 a 15 s, ver Achados no README).",
+          "// O limite de tempo das requisições dela é de 15 s; o das outras APIs continua 5 s.",
+          "pm.variables.set(\"limiteTempoMs\", 15000);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Nova tentativa automática em erro de servidor (5xx), igual à coleção principal.",
+          "const tentativa = Number(pm.collectionVariables.get(\"tentativa\") || 0);",
+          "if (pm.response.code >= 500 && tentativa < 2) {",
+          "    console.warn(`${pm.iterationData.get(\"uf\")}: ${pm.response.code} ${pm.response.status}. Nova tentativa (${tentativa + 1} de 2).`);",
+          "    pm.collectionVariables.set(\"tentativa\", tentativa + 1);",
+          "    pm.collectionVariables.set(\"repetindo\", \"sim\");",
+          "    pm.execution.setNextRequest(pm.info.requestName);",
+          "    setTimeout(() => {}, 3000);",
+          "    return;",
+          "}",
+          "pm.collectionVariables.set(\"tentativa\", 0);",
+          "pm.collectionVariables.set(\"repetindo\", \"nao\");",
+          "",
+          "pm.test(\"Responde em até 15 segundos\", () => {",
+          "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "tentativa",
+      "value": "0"
+    },
+    {
+      "key": "repetindo",
+      "value": "nao"
     }
   ]
 }

@@ -35,7 +35,8 @@ jobs:
         run: npm install
 
       - name: Rodar as coleções (APIs e bancadas)
-        run: npm test
+        # No CI, as requisições da Câmara são puladas: a API não responde a acessos de fora do Brasil.
+        run: npm run test:ci
 
       - name: Página dos relatórios
         if: always()
@@ -65,5 +66,3 @@ jobs:
       - name: Publicar no GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
-        with:
-          timeout: 1200000
