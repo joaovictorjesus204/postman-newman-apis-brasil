@@ -698,6 +698,17 @@
   ],
   "event": [
     {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Limite de tempo padrão (5 s) definido a cada requisição. A pasta da Câmara",
+          "// muda para 15 s no próprio pre-request, que roda depois deste.",
+          "pm.variables.set(\"limiteTempoMs\", 5000);"
+        ]
+      }
+    },
+    {
       "listen": "test",
       "script": {
         "type": "text/javascript",
